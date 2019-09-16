@@ -1,0 +1,48 @@
+---
+title: "Chapter2"
+author: "Paul Dong"
+date: "2019/9/16"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+theme_set(theme_light())
+```
+
+To answer the question: of all the players the agent has seen batting 100/300, how good did they turn out to be?
+
+```{r}
+N <- 10e6
+sims <- tibble(
+  true_avg = rbeta(N, 81, 219),
+  hits = rbinom(N, 300, true_avg)
+)
+```
+See how the distribution of capabilities of those ones hitted 100
+```{r}
+sims %>% 
+  filter(hits == 100) %>% 
+  ggplot(aes(true_avg))+
+  geom_histogram(aes(y = ..density..))+
+  geom_density() 
+
+sims %>% 
+  filter(hits == 100) %>% 
+  pull(true_avg) %>% 
+  summary
+```
+See how the distribution of capabilities of those ones hitted 60, 80, 100 compares
+
+this is the essence of posterior distribution
+```{r}
+sims %>% 
+  filter(hits %in% c(60, 80, 100)) %>% 
+  ggplot(aes(true_avg, color = as.factor(hits)))+
+  geom_density()
+  
+```
+
