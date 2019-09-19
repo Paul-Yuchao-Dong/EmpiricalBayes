@@ -1,0 +1,61 @@
+---
+title: "Chapter 5:H test"
+author: "Paul Dong"
+date: "2019/9/19"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(Lahman)
+
+theme_set(theme_light())
+```
+```{r}
+career <- Batting %>% 
+  filter(AB > 0) %>% 
+  anti_join(Pitching, by = "playerID") %>% 
+  group_by(playerID) %>% 
+  summarise(H = sum(H), AB = sum(AB)) %>% 
+  mutate(average = H / AB)
+
+career <- Master %>% 
+  tbl_df() %>% 
+  select(playerID, nameFirst, nameLast) %>% 
+  unite(name, nameFirst, nameLast, sep = " ") %>% 
+  inner_join(career, by = "playerID") %>% 
+  select(-playerID)
+```
+```{r}
+alpha0 <- 101.4
+beta0 <- 287.3
+
+career_eb <- career %>% 
+  mutate(
+    alpha1 = alpha0 + H,
+    beta1 = beta0 + AB - H,
+    eb_estimate = alpha1 / (alpha1 + beta1)
+         )
+```
+```{r}
+career_eb %>% 
+  filter(name == "Hank Aaron") %>% 
+  {
+    alpha_single <<- .$alpha1
+    beta_single <<- .$beta1
+  }
+```
+```{r}
+library(tidyverse)
+theme_set(theme_light())
+alpha_single <- 3850
+beta_single <- 8818
+ggplot(data.frame(x=c(0.28,0.32)), aes(x))+
+  stat_function(fun = dbeta, args = list(shape1 = alpha_single, shape2 = beta_single))+
+  stat_function(data = data.frame(x=c(0.28,0.3)), aes(x),fun = dbeta, args = list(shape1 = alpha_single, shape2 = beta_single), geom = "area", fill = "blue", inherit.aes = F)
+  
+```
+

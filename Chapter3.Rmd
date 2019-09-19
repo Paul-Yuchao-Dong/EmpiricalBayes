@@ -1,0 +1,55 @@
+---
+title: "Chapter3"
+author: "Paul Dong"
+date: "2019/9/16"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(Lahman)
+```
+
+```{r}
+Batting %>% 
+  skimr::skim()
+```
+```{r}
+Pitching %>% 
+  skimr::skim()
+```
+Data cleaning
+```{r}
+career <- Batting %>% 
+  filter(AB > 0) %>% 
+  anti_join(Pitching, by = "playerID") %>% 
+  group_by(playerID) %>% 
+  summarise(H = sum(H), AB = sum(AB)) %>% 
+  mutate(average = H / AB)
+
+career <- Master %>% 
+  tbl_df() %>% 
+  select(playerID, nameFirst, nameLast) %>% 
+  unite(name, nameFirst, nameLast, sep = " ") %>% 
+  inner_join(career, by = "playerID") %>% 
+  select(-playerID)
+```
+
+```{r}
+career %>% 
+  arrange(-average)
+
+career %>% 
+  arrange(average)
+```
+
+```{r}
+career %>% 
+  filter(AB>=500) %>% 
+  ggplot(aes(average))+
+  geom_histogram()
+```
+
