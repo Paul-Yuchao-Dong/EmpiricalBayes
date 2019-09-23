@@ -49,13 +49,27 @@ career_eb %>%
   }
 ```
 ```{r}
-library(tidyverse)
-theme_set(theme_light())
-alpha_single <- 3850
-beta_single <- 8818
+# alpha_single <- 3850
+# beta_single <- 8818
 ggplot(data.frame(x=c(0.28,0.32)), aes(x))+
   stat_function(fun = dbeta, args = list(shape1 = alpha_single, shape2 = beta_single))+
-  stat_function(data = data.frame(x=c(0.28,0.3)), aes(x),fun = dbeta, args = list(shape1 = alpha_single, shape2 = beta_single), geom = "area", fill = "blue", inherit.aes = F)
+  stat_function(xlim = c(0.28, 0.3), aes(x),fun = dbeta, args = list(shape1 = alpha_single, shape2 = beta_single), geom = "area", fill = "blue", inherit.aes = F)
+
   
+```
+
+```{r}
+career_eb <- career_eb %>% 
+  mutate(PEP = pbeta(0.3, alpha1, beta1))
+```
+```{r}
+career_eb %>% 
+  ggplot(aes(PEP))+
+  geom_histogram()
+```
+```{r}
+career_eb %>% 
+  ggplot(aes(eb_estimate, PEP, col= AB))+
+  geom_point()
 ```
 
