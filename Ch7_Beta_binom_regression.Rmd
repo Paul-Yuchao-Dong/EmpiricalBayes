@@ -42,3 +42,28 @@ career_eb <- career %>%
   arrange(desc(eb_estimate))
 ```
 
+```{r}
+library(gamlss)
+fit <- gamlss(data = career_eb,
+              family = BB(mu.link = "identity"),
+              cbind(H, AB - H) ~ log(AB)
+              )
+```
+```{r}
+fitted_mu <- fitted(fit, parameter = "mu")
+fitted_sigma <- fitted(fit, parameter = "sigma")
+career_eb <- career_eb %>% 
+  mutate(alpha2 = fitted_mu / fitted_sigma + H,
+         beta2 = (1-fitted_mu) / fitted_sigma + AB,
+         bb_estimate_prior = fitted_mu,
+         bb_estimate_post = alpha2 / beta2
+         )
+```
+```{r}
+career_eb %>% 
+  gather(key = "type", value = "estimate", average, eb_estimate, bb_estimate_post, -AB) %>%
+  View
+  ggplot(aes())
+```
+
+
