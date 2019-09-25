@@ -129,4 +129,43 @@ crossing(x = seq(0.08, .35, .001), AB = c(1, 10, 100, 1000, 10000)) %>%
   ylab("Prior density")
 ```
 
+```{r}
+plot(fit)
+```
+```{r}
+fitted_mu <- fitted(fit, parameter = "mu")
+fitted_sigma <- fitted(fit, parameter = "sigma")
+tmp <- fitted(fit)
+```
+```{r}
+View(tmp)
+```
+```{r}
+career_bb <- career_eb %>% 
+  mutate(
+    alpha2_prior = fitted_mu / fitted_sigma,
+    beta2_prior = (1-fitted_mu)/fitted_sigma,
+    alpha2_post = alpha2_prior + H,
+    beta2_post = beta2_prior - H + AB,
+    bb_estimate = alpha2_post / (alpha2_post + beta2_post)
+  )
+```
+```{r}
+career_bb %>% 
+  pivot_longer(c(average, eb_estimate, bb_estimate), names_to = "type", values_to = "estimate") %>% 
+  mutate(type = as_factor(type) ) %>% 
+  ggplot(aes(log(AB), estimate))+
+  geom_point()+
+  facet_wrap(~type)+
+  geom_smooth(method = lm)
+  NULL
+```
+```{r}
+career_bb %>% 
+  ggplot(aes(eb_estimate, bb_estimate, color = AB))+
+  scale_color_continuous(trans = "log")+
+  geom_point()+
+  geom_abline(slope = 1, intercept = 0)+
+  NULL
+```
 
