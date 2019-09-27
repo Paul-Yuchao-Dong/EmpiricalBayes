@@ -1,0 +1,86 @@
+---
+title: "Chapter8 Hierarchical"
+author: "Paul Dong"
+date: "2019/9/27"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+extrafont::loadfonts(device = "win")
+library(gamlss)
+library(dplyr)
+library(tidyr)
+library(Lahman)
+library(ggplot2)
+theme_set(theme_minimal())
+```
+```{r}
+pitchers <- Pitching %>% 
+  group_by(playerID) %>% 
+  summarise(gamesPitched = sum(G)) %>% 
+  filter(gamesPitched>3)
+
+career <- Batting %>% 
+  filter(AB>0) %>% 
+  anti_join(pitchers, by = "playerID") %>% 
+  group_by(playerID) %>% 
+  summarise(H = sum(H), AB = sum(AB), year = mean(yearID)) %>% 
+  mutate(average = H / AB)
+
+career <- Master %>% 
+  tbl_df() %>% 
+  select(playerID, nameFirst, nameLast, bats) %>% 
+  unite(name, nameFirst, nameLast, sep = " ") %>% 
+  inner_join(career, by = "playerID")
+  
+```
+Chapter 7 model
+```{r}
+library(naniar)
+vis_miss(career)
+```
+
+
+```{r}
+fit <- gamlss(data = career %>% select(-bats),
+              family = BB(mu.link = "identity"),
+              cbind(H, AB - H) ~ log(AB)
+              )
+
+```
+Chapter 7 estimate
+```{r}
+career_eb <- career %>% 
+  mutate(mu = fitted(fit, parameter = "mu"),
+         sigma = fitted(fit, parameter = "sigma")) %>% 
+  mutate(alpha = mu / sigma,
+         beta = (1-mu) / sigma) %>%
+  mutate(estimate = (H + alpha) / (AB + beta + alpha))
+```
+
+```{r}
+career %>% 
+  count(bats)
+```
+
+Filter out the NAs in bats data and relevel
+```{r}
+career2 <- career %>% 
+  filter(!is.na(bats)) %>% 
+  mutate(bats = forcats::fct_relevel(bats, "R"))
+```
+
+```{r}
+fit2 <- gamlss(data = career2,
+               family = BB(mu.link = "identity"),
+               cbind(H, AB-H)~ log(AB) + bats
+               )
+```
+```{r}
+library(broom)
+tidy(fit2)
+```
+
