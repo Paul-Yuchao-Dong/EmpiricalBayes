@@ -53,17 +53,22 @@ fit <- gamlss(data = career_eb,
 fitted_mu <- fitted(fit, parameter = "mu")
 fitted_sigma <- fitted(fit, parameter = "sigma")
 career_eb <- career_eb %>% 
-  mutate(alpha2 = fitted_mu / fitted_sigma + H,
-         beta2 = (1-fitted_mu) / fitted_sigma + AB,
-         bb_estimate_prior = fitted_mu,
-         bb_estimate_post = alpha2 / beta2
+  mutate(alpha_prior = fitted_mu / fitted_sigma,
+         beta_prior = (1-fitted_mu) / fitted_sigma,
+         alpha_post = alpha_prior + H,
+         beta_post = beta_prior - H + AB,
+         bb_estimate_post = alpha_post / (beta_post + alpha_post)
          )
 ```
 ```{r}
 career_eb %>% 
-  gather(key = "type", value = "estimate", average, eb_estimate, bb_estimate_post, -AB) %>%
-  View
-  ggplot(aes())
+  pivot_longer(c(average, eb_estimate,bb_estimate_post), names_to = "type", values_to = "estimate") %>% 
+  ggplot(aes(log(AB), estimate))+
+  geom_point()+
+  facet_wrap(~type)+
+  geom_smooth(method = "lm")+
+  NULL
+  
 ```
 
 
