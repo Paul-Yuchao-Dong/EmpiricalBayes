@@ -7,24 +7,174 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyr)
+library(Lahman)
+library(ggplot2)
+theme_set(hrbrthemes::theme_ipsum())
 ```
 
-## R Markdown
+## Data Preparation
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+```{r}
+# Identify those who have pitched at least three games
+pitchers <- Pitching %>%
+  group_by(playerID) %>%
+  summarize(gamesPitched = sum(G)) %>%
+  filter(gamesPitched > 3)
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+career <- Batting %>%
+  filter(AB > 0, lgID == "NL", yearID >= 1980)%>%
+  group_by(playerID) %>%
+  summarize(H = sum(H), AB = sum(AB), year = mean(yearID))%>%
+  mutate(average = H / AB,isPitcher = playerID %in% pitchers$playerID)# Add player names
 
-```{r cars}
-summary(cars)
+career <- Master %>%
+  tbl_df() %>%
+  select(playerID, nameFirst, nameLast, bats) %>%
+  unite(name, nameFirst, nameLast, sep = " ") %>%
+  inner_join(career, by = "playerID")
+```
+```{r display_dist}
+display_dist <- function(.data, cluster){
+  .data %>% 
+  filter(average !=0 & average <= 0.4) %>% 
+  ggplot(aes(average, fill = {{cluster}}))+
+  geom_histogram(aes(y = ..density..),binwidth = 0.01, position = "identity", alpha = 0.5)+
+  geom_density(alpha= 0.1, lty = "dashed")+
+  hrbrthemes::scale_x_percent()+
+  NULL
+}
+```
+```{r}
+display_dist(career, isPitcher)
+```
+```{r}
+set.seed(2016)
+
+starting_data <- career %>% 
+  filter(AB>=20) %>% 
+  select( -year, -bats, -isPitcher) %>% 
+  mutate(cluster = sample(c("A", "B"), n(), replace = TRUE) %>% factor)
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+```{r}
+display_dist(starting_data, cluster)
+```
+```{r fit_bb_mle}
+fit_bb_mle <- function(x, n){
+  ll <- function(alpha, beta){
+    -sum(VGAM::dbetabinom.ab(x, n, alpha, beta, log = TRUE))
+  }
+  m <- stats4::mle(ll, start = list(alpha = 3, beta = 10),
+                   method = "L-BFGS-B", lower = c(0.001, 0.001))
+  ab <- stats4::coef(m)
+  data.frame(alpha = ab[[1]], beta = ab[[2]])
+}
+```
+```{r}
+fit_bb_mle(starting_data$H, starting_data$AB)
+```
+```{r}
+fits <- starting_data %>% 
+  group_by(cluster) %>% 
+  group_modify(~fit_bb_mle(.x$H,.x$AB)) 
 
-```{r pressure, echo=FALSE}
-plot(pressure)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+crossing <- starting_data %>% 
+  select(-cluster) %>% 
+  crossing(fits) %>% 
+  mutate(likelihood = VGAM::dbetabinom.ab(H, AB, alpha, beta)) %>% 
+  group_by(playerID) %>% 
+  top_n(1, likelihood)
+  
+display_dist(crossing, cluster)  
+```
+
+```{r}
+set.seed(1337)
+
+iterate_em <- function(state, ...){
+  # Maximize
+  fits <- state$assignments %>% 
+    group_by(cluster) %>% 
+    group_modify(~fit_bb_mle(.x$H,.x$AB)) 
+  # Expectation
+  assignments <- state$assignments %>% 
+    select(playerID:average) %>% 
+    crossing(fits) %>% 
+    mutate(likelihood = VGAM::dbetabinom.ab(H, AB, alpha, beta)) %>% 
+    group_by(playerID) %>% 
+    top_n(1, likelihood) %>% 
+    ungroup()
+  display_dist(assignments, cluster) %>% print
+  list(assignments = assignments, fits = fits)
+}
+```
+
+```{r}
+init <- list(assignments = starting_data, fits = fits)
+rec <- purrr::accumulate(1:5, iterate_em, .init=init)
+```
+
+```{r}
+library(purrr)
+fit_interations <- rec %>% 
+  map(~.x$fits) %>% 
+  map2_dfr(1:length(rec), ~ mutate(.x, iter = .y))
+```
+```{r}
+fit_interations %>% 
+  crossing(x = seq(0.1,0.35, length.out = 100)) %>% 
+  mutate(density = dbeta(x, alpha, beta)) %>% 
+  mutate(iter = factor(iter)) %>% 
+  ggplot(aes(x, density, color = iter, group = iter))+
+  geom_line(alpha = 0.5)+
+  hrbrthemes::scale_x_percent()+
+  facet_wrap(~cluster)+
+  NULL
+```
+```{r}
+final_parameters <- last(rec)$fits
+```
+```{r}
+career_likelihoods <- career %>% 
+  filter(AB>20) %>% 
+  crossing(final_parameters) %>% 
+  mutate(likelihood = dbeta(H/AB, alpha, beta)) %>% 
+  group_by(playerID) %>% 
+  mutate(pr = likelihood / sum(likelihood))
+```
+
+```{r}
+career_assignments <- career_likelihoods %>% 
+  group_by(playerID) %>% 
+  top_n(1, pr) %>% 
+  ungroup()
+
+career_assignments %>% 
+  ggplot(aes(cluster, isPitcher)) +
+  geom_count()
+  
+```
+```{r}
+eb_shrinkage <- career_likelihoods %>% 
+  mutate(shrunken = (H + alpha) / (AB + beta + alpha)) %>% 
+  group_by(playerID) %>% 
+  mutate(w_estimate = sum(shrunken * pr))
+```
+```{r}
+eb_shrinkage %>% 
+  pivot_longer(c(average, w_estimate), names_to = "type", values_to = "estimate") %>% 
+  ggplot(aes(AB, estimate, color = isPitcher))+
+  geom_point(alpha = 0.5)+
+  scale_x_continuous(trans = "log10", labels = scales::comma)+
+  hrbrthemes::scale_y_percent()+
+  facet_wrap(~type)+
+  NULL
+```
+
+
