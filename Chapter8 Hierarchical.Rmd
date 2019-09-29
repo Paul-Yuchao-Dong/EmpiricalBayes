@@ -45,7 +45,7 @@ vis_miss(career)
 
 
 ```{r}
-fit <- gamlss(data = career %>% select(-bats),
+fit1 <- gamlss(data = career %>% select(-bats),
               family = BB(mu.link = "identity"),
               cbind(H, AB - H) ~ log(AB)
               )
@@ -54,8 +54,8 @@ fit <- gamlss(data = career %>% select(-bats),
 Chapter 7 estimate
 ```{r}
 career_eb <- career %>% 
-  mutate(mu = fitted(fit, parameter = "mu"),
-         sigma = fitted(fit, parameter = "sigma")) %>% 
+  mutate(mu = fitted(fit1, parameter = "mu"),
+         sigma = fitted(fit1, parameter = "sigma")) %>% 
   mutate(alpha = mu / sigma,
          beta = (1-mu) / sigma) %>%
   mutate(estimate = (H + alpha) / (AB + beta + alpha))
@@ -81,6 +81,75 @@ fit2 <- gamlss(data = career2,
 ```
 ```{r}
 library(broom)
-tidy(fit2)
+fit2_tbl <- tidy(fit2)
+```
+```{r}
+prior_plot_data <- crossing(
+  AB = c(1, 10, 100, 1000, 10000),
+  bats = c("R", "L")
+) %>% 
+  mutate(
+    mu = fit2_tbl$estimate[[1]] +
+      fit2_tbl$estimate[[2]]*log(AB)+
+      fit2_tbl$estimate[[4]]*(bats == "L"),
+    sigma = exp(fit2_tbl$estimate[[5]])
+  ) %>%  # reparameteration
+  mutate(
+    alpha0 = mu / sigma,
+    beta0 = (1 - mu) / sigma
+    ) %>% 
+  crossing(x = seq(0.1, 0.35, length.out = 100)) %>% 
+  mutate(pr = dbeta(x,alpha0,beta0))
+
+prior_plot_data %>% 
+  ggplot(aes(x, pr, color = factor(AB)))+
+  geom_line(aes(lty = factor(bats)))+
+  NULL
+
+```
+```{r}
+tibble(
+  H = 3*10^(1:4),
+  AB = 10*10^(1:4)
+    ) %>%  
+  crossing(bats = c("R", "L")) %>% 
+  augment(fit2, newdata = ., se_fit = TRUE) 
+```
+
+```{r}
+library(splines)
+fit3 <- gamlss(data = career2,
+               family = BB(mu.link = "identity"),
+               cbind(H, AB - H) ~ 0 + log(AB) + bats + ns(year, df = 5)
+                 )
+
+```
+
+```{r}
+summary(fit3)
+```
+
+```{r}
+fit4 <- gamlss(data = career2,
+               family = BB(mu.link = "identity"),
+               cbind(H, AB - H) ~ 0 + log(AB) + ns(year, df = 5) * bats
+               )
+```
+```{r}
+players <- crossing(
+  year = c(1915, 1965, 2015),
+  bats = c("R", "L"),
+  H = 30, AB = 100
+)
+
+players_posterior <- players %>% 
+  mutate(mu = predict(fit4, what = "mu", newdata = .)) %>% 
+  mutate(sigma = predict(fit4, what = "sigma",newdata = players, type = "response")) %>% # set type to terms would cause error
+  mutate(a0 = mu / sigma,
+         b0 = (1-mu) / sigma,
+         a1 = H + a0,
+         b1 = AB - H + b0,
+         )
+
 ```
 
