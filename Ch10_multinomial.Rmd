@@ -39,4 +39,65 @@ hit_types <- Batting %>%
     slugging = (Single + 2 * Double + 3 * Triple + 4 * HR) / AB
             )
 ```
+```{r}
+hit_types %>% 
+  arrange(-slugging) %>% 
+  head()
+```
+Pretty Bad, no shrinkage, no prior
+
+## Multinomial Distribution
+```{r}
+rmultinom(3,100, rep(.2, times = 5))
+```
+```{r}
+rdiric <- VGAM::rdiric
+```
+```{r}
+rdiric(3, c(1,1,1,1,1))
+```
+
+```{r}
+hit_500 <- hit_types %>% 
+  filter(AB>500)
+
+hit_matrix <- hit_500 %>% 
+  select(Single:NonHit) %>% 
+  as.matrix()
+```
+
+```{r}
+dm_fit <- DirichletMultinomial::dmn(hit_matrix, 1)
+```
+
+```{r}
+library(broom)
+
+
+```
+```{r}
+ret <- as.data.frame(dm_fit@fit)
+```
+
+```{r}
+tidy.DMN <- function(x,...){
+  ret <- as.data.frame(x@fit)
+  tbl_df(fix_data_frame(ret, c("conf.low", "estimate", "conf.high")))
+}
+```
+
+```{r}
+dm_params <- tidy(dm_fit)
+```
+```{r}
+hit_types %>% 
+  filter(AB>500) %>% 
+  mutate_at(vars(Single:NonHit), ~ .x / AB) %>% 
+  pivot_longer(Single:NonHit, names_to = "type", values_to = "value") %>% 
+  ggplot(aes(value))+
+  geom_histogram()+
+  hrbrthemes::scale_x_percent(limits = c(0, 0.35))+
+  facet_wrap(~type)+
+  NULL
+```
 
