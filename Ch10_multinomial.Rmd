@@ -1,0 +1,42 @@
+---
+title: "Ch10_multinomial"
+author: "paul"
+date: "9/29/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyr)
+library(Lahman)
+library(ggplot2)
+theme_set(hrbrthemes::theme_ipsum())
+```
+
+```{r}
+# Identify those who have pitched at least three games
+pitchers <- Pitching %>%
+  group_by(playerID) %>%
+  summarize(gamesPitched = sum(G)) %>%
+  filter(gamesPitched > 3)
+
+player_names <- Master %>% 
+  transmute(playerID, name = paste(nameFirst, nameLast))
+
+hit_types <- Batting %>%
+  filter(AB > 0)%>%
+  anti_join(pitchers, by = "playerID") %>% 
+  rename(Double = X2B, Triple = X3B) %>% 
+  group_by(playerID) %>% 
+  summarise_each(funs(sum(., na.rm = TRUE)), AB, H, Double, Triple, HR) %>% 
+  inner_join(player_names, by = "playerID") %>% 
+  transmute(
+    playerID, name, AB, H,
+    Single = H - Double - Triple - HR,
+    Double, Triple, HR,
+    NonHit = AB - H,
+    slugging = (Single + 2 * Double + 3 * Triple + 4 * HR) / AB
+            )
+```
+
