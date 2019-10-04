@@ -3,6 +3,8 @@ title: "Ch10_multinomial"
 author: "paul"
 date: "9/29/2019"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -90,14 +92,58 @@ tidy.DMN <- function(x,...){
 dm_params <- tidy(dm_fit)
 ```
 ```{r}
+hit_density <- dm_params %>% 
+  mutate(alpha = estimate,
+         beta = sum(estimate) - estimate
+         ) %>% 
+  filter(term != "NonHit") %>% 
+  select(type = term, alpha, beta) %>% 
+  crossing(x = seq(0, 0.35, length.out = 100)) %>% 
+  mutate(density = dbeta(x, alpha, beta))
+```
+```{r}
 hit_types %>% 
   filter(AB>500) %>% 
   mutate_at(vars(Single:NonHit), ~ .x / AB) %>% 
   pivot_longer(Single:NonHit, names_to = "type", values_to = "value") %>% 
   ggplot(aes(value))+
-  geom_histogram()+
+  geom_histogram(aes(y = ..density..))+
+  geom_line(data = hit_density, aes(y = density, x = x), color = "red")+
   hrbrthemes::scale_x_percent(limits = c(0, 0.35))+
   facet_wrap(~type)+
   NULL
+```
+```{r}
+
+eb_AB <- sum(dm_params$estimate)
+
+eb_career <- dm_params %>% 
+  select(term, estimate) %>% 
+  pivot_wider(names_prefix = "eb_",names_from = term, values_from = estimate) %>% 
+  crossing(hit_types) %>%
+  mutate(Single = Single + eb_Single,
+         Double = Double + eb_Double,
+         Triple = Triple + eb_Triple,
+         HR = HR + eb_HR,
+         NonHit = NonHit + eb_NonHit, 
+         AB = AB + eb_AB         
+         ) %>% 
+  mutate(eb_slugging = (Single + 2 * Double + 3 * Triple + 4 * HR) / AB)
+```
+
+```{r}
+eb_career %>% 
+  filter(AB>3) %>% 
+  ggplot(aes(slugging, eb_slugging))+
+  geom_point(aes(color = AB))+
+  geom_abline(color = "red")+
+  scale_color_continuous(trans = "log10")+
+  NULL
+```
+
+```{r}
+eb_career %>% 
+  arrange(eb_slugging) %>% 
+  View()
 ```
 
